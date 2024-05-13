@@ -1,0 +1,829 @@
+; File with the "to-go"- functionality of citizen-agents
+
+; FILE HISTORY:
+
+; 2024-01-29 Initial template, gks
+; 
+;
+;---------------------------------------------------
+
+;---- Specific, local variables of citizen-agents
+citizens-own [
+  ;cvision;-----------citizen-vision is set by ruler 'citizen-vision'
+  homeLoc;------------home location, where the agent lives
+  localxy;------------current local patch on which the agent is standing on
+  destinationxy;------destination patch to go to
+  ;destinationRegion;-destination region to go to
+  occupation ;--------"blue-collar", "white-collar", "student", "unemployed"
+  walkdesire?;--------flag to indicate wanting to move around
+  pArrest;------------Arrest probability.
+  C ;-----------------Number of citizen agents within cvision (includes oneself)
+  A ;-----------------Number of cop agents within cvision
+  hide?;--------------Decision to either continue with the task or to interrupt the task and hide from cops
+  fear ;--------------Personal fear variable
+  
+  anger ;-------------Value for the citizen’s anger or aggression
+  anger_h;------------Homogenous part of the anger, determined by frustration and legitimacy
+  anger_d;------------Dynamic part of the anger, updated by events
+  thrAnger ;----------Threshold for the anger value being ’high’
+  percAnger ;---------Percentage of change of anger, between 5-30 %
+  
+  
+  risk;---------------Risk avversion of individual citizens. Uniformly distributed in the range [0..1]. 
+  k ;-----------------Constant to finetune the arrest probability
+  f ;-----------------Constant for the update of the personal Fear value
+  
+  vFrust ;------------Value for the citizen’s frustration
+  thrFrust ;----------Threshold for the frustration value
+  alfaFrust ;---------Constant value that decreases 100% to about 91% within one week (=update time interval)
+  minFrust;-----------Value to which vFrust is set after a political-action
+  
+  jailterm ;----------time of jailterm
+  jailsentence ;------How much time the citizen has been sentenced to spend in prison
+  inPrison?;----------Whether or not the citizen is in prison
+  friendList;---------List of other citizen agents that are considered as friends
+  friend;-------------An agent from the friendList
+  proState ;----------State variable for the proactive states. Enumeration = Study, 
+                      ;Work, Unemployed, ’Walking around’, ’Meeting friends’, ’Go out’, Political, Resignation, Demonstration
+                      ;Pursue of Happiness Goals
+  vWalk ;-------------Value for Walk-desire [0..1]
+  minWalk ;-----------Min-value for Walk-desire after fulfillment of desire
+  thrWalk ;-----------Threshold for Walk-desire
+  dWalk ;-------------Increase of vWalk for every day in percentage
+  
+  vMeet ;-------------Value for Meeting Friends-desire [0..1]
+  minMeet ;-----------Min-value for Meeting-Friends-desire after fulfillment of desire
+  thrMeet ;-----------Threshold for Meeting -Friends-desire
+  
+  vRest ;-------------Value for Going to Restaurant-desire [0..1]
+  minRest ;-----------Min-value for Going to Restaurant after fulfillment of desire
+  thrRest ;-----------Threshold for Going to Restaurant -desire
+  
+  vCinema ;-----------Value for Going to Cinema-desire [0..1]
+  minCinema ;---------Min-value for Going to Cinema after fulfillment of desire
+  thrCinema ;---------Threshold for Going to Cinema -desire
+  
+  ;different help-variables
+  counter; -----------general purpose counter
+  finishedState;------indicates that a state is fulfilled and a new one can be deliberated
+  initialCondition;---flag to indicate if the initial condition is met
+  finalCondition; ----flag to indicate if the final condition is met
+  safespot;---------- indicates if the current spot is save (not empty and not TownSquare)
+  agTimer1;---------- local timer for agents
+  TimerX
+  agAlarm1;
+  deliberationFlag;---flag to restrict one deliberation per evening/weekend
+  cinemaDuration;-----Logotime for the end of the cinema goal
+  restDuration;-------Logotime for the end of the restaurant goal
+  walkDuration;-------Logotime for the end of the walking goal
+  meetDuration;
+  speechDuration;-----Logotime for the speech
+  onceOnWeekend;------Flag to set for once per weekend
+  want2beHome;--------Flag to indicate preference to stay at home
+  
+]
+
+
+
+to setup-citizens
+  ; setup citizen-agents
+  create-citizens num-citizens [
+    set label who
+    set shape "person" 
+    set size 1
+    set color white
+    set inPrison? false
+    move-to one-of patches with [region = "house"]
+    ; save the home location
+    set homeLoc patch-here
+    setxy [pxcor] of homeLoc [pycor] of homeLoc 
+    set occupation item (random 4) (list "blue-collar" "white-collar" "student" "unemployed")
+    set friendList []
+    set friend []
+    set beliefs []
+    set intentions []
+    set incoming-queue []
+    set destinationxy []
+    set walkdesire? false
+    set counter 0 ; all-purpose counter
+    set k 3.03  ; constant for finetuned arrest probability
+    set f 0.05
+    set fear 0.1
+    set risk random-float 1.0
+    set finishedState false
+    set initialCondition false
+    set finalCondition false
+    set agAlarm1 0
+    ; variables for walk
+    set minWalk ((random 2) + 1) / 10
+    set vWalk minWalk
+    set thrWalk ((random 5) + 5) / 10
+    ;set dWalk ((random 5)  + 1) / 100
+    ; variables for meeting friends
+    set minMeet ((random 2)  + 1) / 10
+    set vMeet minMeet
+    set thrMeet ((random 5) + 5) / 10
+    ; variables for going out (restaurant)
+    set minRest ((random 2)  + 1) / 10
+    set vRest minRest
+    set thrRest ((random 5) + 5) / 10
+    ; variables for cinema
+    set minCinema ((random 2)  + 1) / 10
+    set vCinema minCinema
+    set thrCinema ((random 5) + 5) / 10
+    set vFrust 0
+    set thrFrust ((random 4) + 6) / 10
+    ;set alfaFrust -2.3
+    set alfaFrust -1.0
+    set minFrust ((random 2)  + 1) / 10
+    set proState []
+    set deliberationFlag true
+    ; update anger
+    set anger 0
+    set anger_h 0.1
+    set anger_d 0.1
+    set thrAnger ((random 2) + 7) / 10
+    ;update-anger
+    set percAnger ((random 2) + 1) / 10
+    set cinemaDuration []
+    set restDuration []
+    set walkDuration []
+    set meetDuration []
+    set speechDuration []
+    set onceOnWeekend true
+    set want2beHome true
+    
+  ]
+  ;once the citizens are created, they can add friends
+  ask citizens [
+    add-friends ; add some other citizens as friends into the friendList
+  ]
+
+end
+
+
+;"""""""""""""""""" Setup-Functions """"""""""""""""""""""""""""""""""""""""""""""""""""""""
+to add-friends
+  let num-friends random 4
+  ;let potential-friends n-of num-friends other citizens
+  repeat num-friends
+  [
+   let potential-friend one-of other citizens 
+   if potential-friend != nobody 
+    ;if any? potential-friends; not empty list, at least one friend
+    [
+      ;set friendList potential-friends
+      set friendList lput potential-friend friendList
+      ;set friendList lput potential-friend friendList
+      ask potential-friend
+      [
+        set friendList lput myself friendList
+      ]
+    ]
+  ]
+  end
+
+
+to citizen_behavior
+  
+  
+;##################################################################################################
+;########## UPDATING the Beliefs, e.g. the agent's information about its environment ##############
+;##################################################################################################
+  
+;----------------------------------- Update every tick --------------------------------------------
+  
+;---- cops nearby, which one is the nearest? How many cops, how many citizens?
+let nearby-police other cops in-radius citizen-vision
+if any? nearby-police [let police min-one-of nearby-police [distance myself]]; identify the cop that is nearest
+set A count nearby-police  ; TODO: choose which method to update varables, are they needed elsewhere?
+set C count (other citizens in-radius citizen-vision)
+
+; ---- identify a path to escape to if needed
+let hidingplaces neighborhood with [not any? cops-here and region = "empty" or region = "TownSquare"]
+
+;--- save local position
+set localxy patch-here
+  
+;check if local spot is safe (one can use the values of patch-here as if it is part of the turtle!)
+ifelse (region != "empty" and region != "TownSquare") [set safespot true][set safespot false]
+
+;--- update the local values for pArrest, risk, fear, etc
+set pArrest 1 - exp((- k * C) / (A + 1))  ; probability of being arrested, updated here
+
+  
+;---------------------------------- Update once a day -----------------------------------------------------
+
+if dailyFlag [
+    ; update daily adaptations of local variables
+    
+    ; daily update of need-values, for example 20% with max-value 1.0
+    ; ska bara uppdateras om citizen inte befinner sig i fängelsen, för där finns inga friheter
+    ;if not inPrison? [
+      set vWalk min (list (vWalk + (vWalk / 5)) 1 )
+      set vMeet min (list (vMeet + (vMeet / 5)) 1 )
+      set vRest min (list (vRest + (vRest / 5)) 1 )
+      set vCinema min (list (vCinema + (vCinema / 5)) 1 )
+    
+      ; update the frustration value if the neeed-values are above the threshold
+      if vWalk > thrWalk [increase-frustration]
+      if vMeet > thrMeet [increase-frustration]
+      if vRest > thrRest [increase-frustration]
+      if vCinema > thrCinema [increase-frustration]
+    ;]
+    
+    set deliberationFlag true ; restrict proactive behavior to one intention per evening during weekdays
+    set want2beHome true; makes sure the citizen is home to read the mails
+    
+    ;print "daily update of needs: "
+    print ( word who ": vWalk = " vWalk ", thrWalk= " thrWalk ", vMeet = " vMeet ", thrMeet= " thrMeet ", vRest= " vRest ", thrRest= " thrRest ", vCinema= " vCinema ", thrCinema = " thrCinema ", vFrust= " vFrust ", thrFrust= " thrFrust ", fear= " fear ", anger= " anger ", thrAnger=" thrAnger)
+    
+  ]
+
+;---------------------------------- Update at the beginning of the Weekend ----------------------------------------------------- 
+if isWeekend [  
+  set onceOnWeekend true ; set flag for proactive behaviors that should happen max once per weekend
+  ]
+
+
+  ;---------------------------------- Update once a week ----------------------------------------------------- 
+  ;--- update once a week
+if weeklyFlag [
+    
+    update_fear ; weekly calibration between the personal and the collective fear variable
+ 
+    ; update anger - we are trying to look at anger as something that builds up slower than frustration, hence once a week
+    update-anger
+    ; lower the frustration level over time
+    decrease-frustration
+  ]
+
+;##################################################################################################
+;################## REACTIVE BEHAVIOR #############################################################
+;##################################################################################################
+
+ ;--------- subsumption hierarchy with highest priority in first if-sentence-----------------------
+ 
+  
+  (ifelse
+    ;add all the reactive behavior in order of their priorities- highest at the top of the list
+    inPrison? [bidePrisonTime]
+    ((A > 0) and (fear >= pArrest) and not safespot) [hideFromCops nearby-police hidingplaces]
+    (destinationxy != []) and (destinationxy != localxy) [moveToDestxy]
+    ;;; "moveAround" moved to proactive goal:
+    [proactiveBehavior] ; this function always at the end by itself
+  )
+  
+  
+end
+
+
+
+;"""""""""""""""""" Reactive Intention-Functions """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+; if asked to go to prison  
+to gotoprison 
+  set fear min (list 1 ((1 + 10 * f) * fear)); 
+  if Debug [print (word "citizen " who " has fear: " fear)]
+  ; set flag
+  set inPrison? true
+  set color red
+  ; move to prison into an own cell (=own patch)
+  let prisoncell one-of patches with [not any? turtles-here and region = "Prison"]
+  ifelse (prisoncell != nobody) [move-to one-of patches with [not any? turtles-here and region = "Prison"]]
+  ; else 
+  [if Debug [print "Prison is too crowded, more than one prisoner in a cell"]
+  move-to one-of patches with [region = "Prison"]] 
+  if Debug [print (word "citizen: " who " is put into prison")]
+end
+
+; if in prison, bide your sentence-time
+to bidePrisonTime
+  if dailyFlag [
+    set jailterm jailterm + 1;counting the time in prison in days 
+    increase-anger; increase anger
+    ;print (word who "in prison, anger = " anger)
+  ] 
+  if Debug [print (word "citizen " who "is in prison since: " jailterm)]
+  if jailterm > jailsentence [; released from prison
+    set jailterm 0
+    ; move forward where there are no cops and is not prison
+    ;let places neighborhood with [not any? cops-here and region != "Prison"]
+    let places neighborhood with [not any? cops-here and region = "empty" or region = "TownSquare"]
+    if any? places [move-to one-of places]
+    set inPrison? false
+    set color yellow
+    if Debug [print (word "citizen " who "is released from prison") ]
+  ]
+end
+
+to hideFromCops [nearby-police hidingplaces]
+  set fear min (list 1 ((1 + f) * fear)); change this to a function in the update function section!
+  let police min-one-of nearby-police [distance myself]
+  if Debug [print (word " citizen: " who " hiding from cop: " police)]
+  
+  if (distance police) > 0 [ ;check if the distance to this police is 0 then just give up, since heading produces errors 
+  set heading (towards police) + 180 ; face opposite from the nearest police
+  if any? hidingplaces [move-to one-of hidingplaces]
+        ] 
+end
+
+to moveAround
+  rt random 50
+  lt random 50
+  fd 1
+  if not (region = "empty" or region = "TownSquare") [
+    ; find a place that is not a building!
+    let footstep neighborhood with [region = "empty" or region = "TownSquare"] 
+    if any? footstep [move-to one-of footstep]]
+  if Debug [print (word who " is randomly moving around")]
+end
+
+to moveToDestxy
+  ifelse localxy != destinationxy [
+        face destinationxy
+        fd 1
+        if Debug [print (word who " in moveToDestxy")]
+  ] 
+  [ let reg []
+    ask patch-here [set reg region]
+    if Debug [print (word who " arrived at destination: " reg)]]
+end
+;"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+
+;##################################################################################################
+;########################################## PROACTIVE BEHAVIOR ####################################
+;##################################################################################################
+
+to proactiveBehavior
+  ; Finite State Machine for the proactive states
+  
+  ;########## Updating the Beliefs that are relevant only for the proactive states ##############
+  ;
+  ;
+  ;------------------ Behavior during Weekdays -------------------------------------------------
+
+
+  
+;  - get up in the morning and either go to work in one of the factories or go to the university to study. If they are unemployed, they might stay at home or go out and look for jobs.
+
+  if isMorning and (not isWeekend) [
+    ; go to work or to university, or stay at home and apply for jobs
+    (ifelse
+      occupation = "blue-collar" [set proState "Factory"]
+      occupation = "white-collar" [set proState "Work"]
+      occupation = "student" [set proState "Study"]
+      occupation = "unemployed" [set proState "Unemployed"]
+      )
+  ]
+  
+ ;- return to their homes in the late afternoon. They read and answer their mails, read the papers, contact friends.
+ ;;; find out why this is not working:   if proState = [] [set proState "StayingHome"]
+
+  
+;- either stay at home or go out to town in the evenings. In town, they can engage in many different activities, such as: 
+;	- going to a restaurant (alone or to to meet others)
+;	- going to the cinema (alone or together with friends)
+;	- stroll around on town square
+;	- participate at the meetings of a political party or at a political event
+
+;   if perceived frustration is higher than a threshold, no more goal-directed behavior is possible
+if vFrust <= thrFrust [
+  
+    ; being at home after work or studies or at weekends
+    if (betweenHours 16 19) and (proState = []) and want2beHome [
+      set proState "StayingHome"
+    ]
+    
+    
+    if isEvening and proState = [] and deliberationFlag [
+    ; deliberate new intention from desires if proState is idle, only deliberate once per evening!
+    ; A threshold for each need can be used to indicate a high priority for meeting a particular need or to trigger frustration.
+      
+      ;let maxValue max (list vWalk vMeet vRest vCinema) ; select the need with the highest value
+      let listOfGoals (list "vWalk" "vMeet" "vRest" "vCinema")
+      let listOfThrDiff (list (thrWalk - vWalk) (thrMeet - vMeet) (thrRest - vRest) (thrCinema - vCinema))
+      let minValue min listOfThrDiff
+      ;select the value nearest its threshhold or above the threshold
+      let index position minValue listOfThrDiff
+      let intention item index listOfGoals 
+      
+      
+    
+      (ifelse
+            intention = "vWalk" [set proState "WalkingAround"]
+            intention = "vMeet" [set proState "MeetingFriends"]
+            intention = "vRest" [set proState "Go_out"]
+            intention = "vCinema" [set proState "Go_out_C"]
+       )
+    ;print (word who ": Evening deliberation = " intention ", frustration= " vfrust ", fear= " fear ", proState: " proState ", initial condition: " initialCondition )
+      
+  
+   set deliberationFlag false   ; only one deliberation per evening on weekdays
+  ]
+    ]
+  
+ ;------------------ Behavior during Weekends -------------------------------------------------
+  
+;  - sleep in longer during the morning
+;- stay at home or go out to town to engage in similar activities as listed for the evenings of weekdays.
+;- if frustrated, they might hold a speech at the town square
+; might do different things
+
+  if isWeekend [
+    ; start the weekend at home until 13 hrs
+    if (proState = []) and (getCurrentHour < 13 ) and want2beHome [set proState "StayingHome"]
+    
+    ;   if perceived frustration is higher than a threshold, no more goal-directed behavior is possible
+    ifelse (vFrust <= thrFrust) [
+      if (proState = []) and (betweenHours 13 19) [
+        ; deliberations only between certain times like 13 - 15 and between 17 -19 so that citizens can come home afterwards
+    
+        ; same intentions as in the evenings
+      let listOfGoals (list "vWalk" "vMeet" "vRest" "vCinema")
+      let listOfThrDiff (list (thrWalk - vWalk) (thrMeet - vMeet) (thrRest - vRest) (thrCinema - vCinema))
+      let minValue min listOfThrDiff
+      ;select the value nearest its threshhold or above the threshold
+      let index position minValue listOfThrDiff
+      let intention item index listOfGoals 
+    
+       
+    (ifelse
+      intention = "vWalk" [set proState "WalkingAround"]
+      intention = "vMeet" [set proState "MeetingFriends"]
+      intention = "vRest" [set proState "Go_out"]
+      intention = "vCinema" [set proState "Go_out_C"]
+      )
+    
+    ;print (word who ": Weekend deliberation = " proState ", frustration= " vfrust ", thrFrust= " thrFrust ", fear= " fear ", proState: " proState ", initial condition: " initialCondition  )
+      ]; normal behavior during weekends
+   ]
+      [ ; frustration > threshold
+      ;- if frustrated, they might hold a speech at the town square, just once at weekends
+      if (proState = []) and onceOnWeekend [
+        set proState "Political"
+        set onceOnWeekend false
+        ]
+      
+      ]
+  
+  ;] ; end of weekend
+  
+  
+  ; section when anger and fear get very high
+  ; preconditions for demonstration
+  if (anger > thrAnger) and (proState = []) and onceOnWeekend [
+    (ifelse
+      anger >= fear [set proState "Demonstration"]
+      anger < fear [set proState "Resignation"]
+    )
+      set onceOnWeekend false
+  ]
+    
+  ] ; end of weekend
+  
+  ; For testing
+  if Debug [print (word who "deliberated proState = " proState)]
+  
+  
+  ; "Finite State Machine" 
+  (ifelse
+    proState = "Study" [study]
+    proState = "Work" [work]
+    proState = "Factory" [factory]
+    proState = "Unemployed" [unemployed]
+    proState = "WalkingAround" [walking]
+    proState = "StayingHome" [athome]
+    proState = "MeetingFriends" [meeting]
+    proState = "Go_out" [go_out]
+    proState = "Go_out_C" [go_out_C]
+    proState = "Political" [political]
+    proState = "Demonstration" [demonstrate]   
+    proState = "Resignation" [resignation]
+    ; add more states here, the order does not matter
+  )
+  
+end
+
+
+;"""""""""""""""""""" State functions """"""""""""""""""""""""""""""""""""""""""""""
+
+to study
+  if Debug [print (word who " is in the proactive state Study")]
+  if (not initialCondition) and (not finalCondition) [set destinationxy one-of patches with [region = "University"]]
+  if (localxy = destinationxy) and (not initialCondition) [; moment when agent arrives at university
+    set initialCondition true
+    ;set agTimer1 timeTaker (random 2) 45
+    if Debug [print (word who " has arrived at the university")]
+    ]
+  if initialCondition and not finalCondition [;wait until timeTaker is finished
+    ;if localtimeTakerDone agTimer1 [set finalCondition true]
+    if isAfternoon [set finalCondition true]
+  ]
+  if finalCondition [
+    set finishedState true
+    set initialCondition false
+    set proState []
+    
+    set finalCondition false
+    if Debug [print (word who " has decided to go home from the university")]
+    set destinationxy homeLoc ; go home again
+  ]
+  
+end
+
+
+to work
+  if Debug [print (word who " is in the proactive state Work")]
+  set destinationxy one-of patches with [region = "Workplace"]
+  if isAfternoon [
+    set finishedState true
+    set proState []
+    if Debug [print (word who " has decided to go home from the workplace")]
+    set destinationxy homeLoc ; go home again
+  ]
+end
+
+to factory
+  if Debug [print (word who " is in the proactive state Factory")]
+  set destinationxy one-of patches with [region = "Factory"]
+  if isAfternoon [
+    set finishedState true
+    set proState []
+    if Debug [print (word who " has decided to go home from the factory")]
+    set destinationxy homeLoc ; go home again
+  ]
+end
+
+to unemployed
+  if Debug [print (word who " is in the proactive state Unemployed")]
+  if isAfternoon [
+    set finishedState true
+    set proState []
+    set destinationxy homeLoc ; go home again
+  ]
+end
+
+to athome
+  if Debug [print (word who " is at home")]
+  ;print (word who " is at home")
+  ; do whatever while at home
+  ifelse (not initialCondition) [
+    ; do things one time
+    ;read the mail
+    process-msg
+    set initialCondition true
+  ][
+  ; do things repeatedly
+    
+    
+    ; condition to deliberate other intentions
+    set finishedState true
+    set proState []
+    set want2beHome false
+    set initialCondition false
+  ]
+  
+  set proState []
+end
+
+to meeting
+  if Debug [print (word who " is in the proactive state MeetingFriends")]
+  ;print (word who ": meeting")
+  if (not initialCondition) [
+    set meetDuration time:copy current-time
+    set meetDuration time:plus meetDuration 2 "hour"
+    set meetDuration time:plus meetDuration 30 "minutes"
+    if not empty? friendList [set friend one-of friendList]
+    set initialCondition true
+  ]
+  ifelse afterTime current-time meetDuration [
+    ;print (word who ": meeting-timerTakeDone: " meetDuration)
+    
+    set finishedState true
+    set proState []
+    
+    set vMeet minMeet
+    ;print (word who ": meeting, new vMeet= " vMeet)
+    set initialCondition false
+    set destinationxy homeLoc ; go home again
+  ][
+    if friend != [] [
+      ;asking the friend for the coordinates
+      set destinationxy [patch-here] of turtle ( [who] of friend )
+        ;[list xcor ycor] of turtle friend
+      print (word who " is meeting " friend ",with coordinates " destinationxy)
+    ]
+  ]
+
+  
+end
+
+to walking
+  if Debug [print (word who " is in the proactive state Walkaround")]
+  ;print (word who ": walking")
+  movearound
+  if (not initialCondition) [
+    ;;;set walkdesire? true
+    set walkDuration time:copy current-time
+    set walkDuration time:plus walkDuration random 2 "hour"
+    set walkDuration time:plus walkDuration 30 "minutes"
+    set initialCondition true
+  ]
+  ifelse afterTime current-time walkDuration [
+    set initialCondition false
+    set finishedState true
+    set proState []
+    set walkdesire? false
+    if Debug [print (word who " has decided to go home from walking around")]
+    set destinationxy homeLoc ; go home again
+    set vWalk minWalk 
+    ;print (word who ": walking, new vWalk= " vWalk)
+  ][movearound]
+end
+
+to go_out
+  if Debug [print (word who " is in the proactive state Go_out")]
+  ;print (word who ": restaurant")
+  if (not initialCondition) [
+    set destinationxy one-of patches with [region = "Restaurant"]
+    set restDuration time:copy current-time
+    set restDuration time:plus restDuration 1 "hour"
+    set restDuration time:plus restDuration 30 "minutes"
+    ;print (word who ": restDuration= " restDuration)
+    set initialCondition true
+  ]
+  if afterTime current-time restDuration [
+    ;print (word who ":go-out-timerTakeDone: " restDuration)
+    ;set initialCondition false
+    set finishedState true
+    set proState []
+    if Debug [print (word who " has decided to go home from restaurant")]
+    
+    set vRest minRest
+    ;print (word who ": restaurant, new vRest= " vRest)
+    set initialCondition false
+    set destinationxy homeLoc ; go home again
+  ]
+    
+end
+
+to go_out_C
+  if Debug [print (word who " is in the proactive state Go_out_C")]
+  ;print (word who ": cinema")
+  if (not initialCondition) [
+    set destinationxy one-of patches with [region = "Cinema"]
+    set cinemaDuration time:copy current-time
+    set cinemaDuration time:plus cinemaDuration 1 "hour"
+    set cinemaDuration time:plus cinemaDuration 30 "minutes"
+    set initialCondition true
+  ]
+  if afterTime current-time cinemaDuration [
+    ;print (word who ":go-out-C-timerTakeDone: " cinemaDuration)
+    
+    set finishedState true
+    set proState []
+    if Debug [print (word who " has decided to go home from cinema")]
+    
+    set vCinema minCinema
+    ;print (word who ": cinema, new vCinema= " vCinema)
+    set initialCondition false
+    set destinationxy homeLoc ; go home again
+  ]
+  
+end
+
+to political
+  if Debug [print (word who " is in the proactive state Political")]
+  print (word who ": political")
+  
+  ; Go to the town square
+  if (not initialCondition) [
+    set destinationxy one-of patches with [region = "TownSquare"]
+    set initialCondition true
+    set finalCondition false
+  ]
+  if initialCondition and (region = "TownSquare") and not finalCondition [
+      set speechDuration time:copy current-time
+      set speechDuration time:plus speechDuration 15 "minutes"
+      
+      set finalCondition true
+      set pcolor blue 
+    ]
+  if finalCondition [
+   if afterTime current-time speechDuration [
+      set pcolor green
+      set finishedState true
+      set proState []
+      set initialCondition false
+      set finalCondition false
+      ; Frust goes down after speech
+      set vFrust minFrust
+      ; Go home after the speech
+      set destinationxy homeLoc
+    ]
+  ]
+
+end
+
+to demonstrate
+  if Debug [print (word who " is in the proactive state Demonstration")]
+  ifelse (not initialCondition) [
+    print (word who " wants to demonstrate")
+    set initialCondition true]
+  [
+    decrease-anger
+    set proState []
+    set initialCondition false
+  ]
+end
+
+to resignation
+  if Debug [print (word who " is in the proactive state Resignation")]
+  ifelse (not initialCondition) [
+    print (word who " has resignated")
+    set initialCondition true]
+  [
+    ;set initialCondition false
+    set proState []
+  ]
+end
+
+
+;""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+;"""""""""""""""""""" Help functions """"""""""""""""""""""""""""""""""""""""""""""
+
+
+;----- Reading the messages
+
+to process-msg
+  print word who ": citizen-messages processed"
+  let performative ""
+  let msg_content ""
+  let type_content ""
+  let msg ""
+  let sender ""
+  let myList []
+  
+  while [not empty? incoming-queue] [
+    set msg get-message
+    set sender get-sender msg
+    set performative get-performative msg
+    set msg_content get-content msg
+    
+    ;do something with this message, like save the important information
+    ; for the proactive behaviors
+  
+  ]
+  
+  
+end
+
+to-report fearValue  ; This is to get the fear of a friend
+  report fear
+end
+
+to update_fear  ; Call this when calibrating weekly fear
+  set fear 0.5 * (glbFear + fear)
+end
+
+to decrease-frustration  ; decrease frustration TODO: implement when
+ set vfrust vfrust * (1 - exp(alfaFrust))
+end
+
+to increase-frustration  ; increases frustration TODO: implement when the cops forbid citizens to do what they want
+  set vfrust min (list 1 (vfrust + 0.1))
+end
+
+to update-anger
+  ; homogenous part of the anger
+  ;"J"-function for the relationship between frustration and anger:
+  ; for low levels of frustration: anger = vFrust *(1-L)
+  ; for medium level of frustration (e.g. 0.6* thrFrust < vFrust <= thrFrust : anger = vFrust*exp(1-L)
+  ; for high level of frustration ( vFrust > thrFrust): anger = vFrust
+  (ifelse
+    ;true [set anger_h vFrust * (1 - L)]
+    vFrust <= thrFrust [set anger_h vFrust * (1 - L)]
+    ;vFrust <= thrFrust [set anger_h vFrust * exp(1 - L)]
+    vFrust > thrFrust [set anger_h vFrust]
+    )
+  ;set anger_h vfrust * (1 - L)
+  ;print (word who "anger: " anger " vfrust: " vfrust " L: " L)
+  set anger min (list 1 (anger_h + anger_d))
+  if anger_d > anger_h [decrease-anger]
+end
+
+to increase-anger
+  ; dynamic part of the anger
+  ;ifelse inPrison? [set anger anger * ( 1 + 0.1 * percAnger)][ set anger anger * ( 1 + percAnger)]
+  ;ifelse inPrison? [set anger_d min (list 1 (anger_d * ( 1 + (0.8 * percAnger))))][ set anger_d min (list 1 (anger_d * ( 1 + percAnger)))]
+  ifelse inPrison? [set anger_d min (list 1 (1.25 * anger_d ))][ set anger_d min (list 1 (1.4 * anger_d ))]
+end
+
+to decrease-anger
+  set anger max (list 0 (anger * (1 - percAnger)))
+end
+
+

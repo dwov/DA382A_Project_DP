@@ -1,0 +1,174 @@
+;===========================================
+;CITIZENS NEED TO OWN VARIABLES:           |
+;agTimer1                                  |
+;agAlarm1                                  |
+;===========================================
+
+extensions [time]
+
+;=======================================================================================================================================
+;INITIALIZATION OF TIME.
+to initTime
+  set start-time (time:create "2024/04/22 08:00:00") ;starting at a Monday morning
+  set current-time time:anchor-to-ticks start-time 1 "minute"
+  set time-passed 0
+end
+
+;=======================================================================================================================================
+;STARTS A TIMER FROM THE CURRENT SIMULATION TIME. THE TIMER IS CHOSEN BY INPUTTING THE HOUR, MINUTE.
+;EXAMPLE OF HOW TO USE THIS, SETTING A TIMER FOR 1.5 HOURS:
+;set agTimer1 timeTaker 1 30
+to-report timeTaker [hour minute]
+  let temp-time time:plus current-time hour "hour"
+  set temp-time time:plus temp-time minute "minute"
+
+  report temp-time
+end
+;=======================================================================================================================================
+;RETURNS TRUE OR FALSE DEPENDING ON WHETHER A TIMETAKER HAS BEEN FINISHED OR NOT: if timeTakerDone
+;MUST BE CALLED ON EACH GO
+to-report timeTakerDone
+  ifelse agTimer1 != nobody
+  [
+    ifelse time:is-equal? current-time agTimer1
+    [
+      set agTimer1 nobody
+      report true
+    ]
+    [report false]
+  ]
+  [report false]
+end
+
+; alternative that works for individual agents
+;CHECKS WETHER A TIMETAKER HAS BEEN FINISHED, requires local variable agTimer
+to-report localtimeTakerDone [agTimer]
+  ifelse agTimer != nobody
+  [
+    ifelse time:is-equal? current-time agTimer
+    [
+      ;set agTimer nobody
+      report true
+    ]
+    [report false]
+  ]
+  [report false]
+end
+
+
+;=======================================================================================================================================
+;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS BETWEEN THE INPUTS min_hour AND max_hour. INPUT CAN ONLY BE HOURS AND NOT MINUTES!
+to-report betweenHours [min_hour max_hour]
+  ifelse (time:get "hour" current-time = min_hour and time:get "minute" current-time >= 0) or (time:get "hour" current-time = max_hour and time:get "minute" current-time = 0)
+    [report true]
+    [report false]
+end
+
+;=======================================================================================================================================
+;WRAPS THE TIME AROUND FROM 23 TO 06. DOES SO BY MANIPULATING THE TICK VALUE TO MATCH THAT OF THE SURPASSED NIGHT. SHOULD BE CALLED EVERY TICK.
+to timeWrapAround
+  set time-passed (word (time:difference-between start-time current-time "minute") " minutes")
+  if time:get "hour" current-time = 23
+  [
+    ; set dailyFlag and weekly flag
+    set dailyFlag true
+    if Debug [print "dailyFlag set to true"]
+    if getCurrentDay = 7 [set weeklyFlag true];assuming that 7 is Sunday
+    ; skip the night
+    set current-time time:plus current-time 7 "hour"
+    set current-time time:anchor-to-ticks current-time 1 "minute"
+    reset-ticks
+    
+    set time-passed (word (time:difference-between start-time current-time "minute") " minutes")
+  ]
+end
+
+;=======================================================================================================================================
+;REPORTS THE CURRENT SIMULATION TIME IN YYYY-MM-D h:mm
+to-report show-time
+  report  time:show current-time "yyyy-MM-d H:mm"
+end
+
+;=======================================================================================================================================
+;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS ON A SATURDAY OR SUNDAY
+to-report isWeekend
+  ifelse time:get "weekday" current-time = 6 or time:get "weekday" current-time = 7  
+  [report true]
+  [report false]
+end
+
+;=======================================================================================================================================
+;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS between 8 or 9
+to-report isMorning
+  ifelse time:get "hour" current-time > 7 and time:get "hour" current-time < 10
+  [report true]
+  [report false]
+end
+
+;=======================================================================================================================================
+;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS between 16 and 17
+to-report isAfternoon
+  ifelse time:get "hour" current-time = 16
+  [report true]
+  [report false]
+end
+
+;=======================================================================================================================================
+;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS later than 18 hrs
+to-report isEvening
+  ifelse time:get "hour" current-time > 18
+  [report true]
+  [report false]
+end
+
+;=======================================================================================================================================
+;RETURNS THE CURRENT MINUTE
+to-report getCurrentMinute
+  report time:get "minute" current-time
+end
+
+;=======================================================================================================================================
+;RETURNS THE CURRENT HOUR
+to-report getCurrentHour
+  report time:get "hour" current-time
+end
+
+;=======================================================================================================================================
+;RETURNS THE CURRENT DAY AS A INTEGER, MONDAY=1, TUESDAY=2, ETC.
+to-report getCurrentDay
+  report time:get "weekday" current-time
+end
+
+;=======================================================================================================================================
+;SET AN ALARM THIS WAY
+;alarm "2024/04/20 12:00:00"
+to alarm [date]
+  set agAlarm1 date
+end
+;=======================================================================================================================================
+;RETURNS TRUE OR FALSE DEPENDING ON WHETHER AN ALARM HAS BEEN FINISHED OR NOT
+;MUST BE CALLED ON EACH GO
+to-report alarmDone
+  ifelse agAlarm1 != nobody
+  [
+    ifelse time:is-equal? current-time agAlarm1
+    [
+      set agAlarm1 nobody
+      report true
+    ]
+    [report false]
+  ]
+  [report false]
+end
+
+;=======================================================================================================================================
+;RETURNS TRUE OR FALSE DEPENDING ON WHETHER the current-time is after meetingTime
+to-report afterTime [actualTime meetingTime]
+  ;;if timeTakerDone [
+  if meetingTime != 0 and meetingTime != [] [
+    if time:is-after? actualTime meetingTime [ report true]
+  ]
+  report false
+end
+
+
