@@ -379,7 +379,10 @@ to proactiveBehavior
   ]
   
  ;- return to their homes in the late afternoon. They read and answer their mails, read the papers, contact friends.
- ;;; find out why this is not working:   if proState = [] [set proState "StayingHome"]
+ ; being at home after work or studies or at weekends
+    if (betweenHours 16 19) and (proState = []) and want2beHome [
+      set proState "StayingHome"
+    ]
 
   
 ;- either stay at home or go out to town in the evenings. In town, they can engage in many different activities, such as: 
@@ -390,12 +393,6 @@ to proactiveBehavior
 
 ;   if perceived frustration is higher than a threshold, no more goal-directed behavior is possible
 if vFrust <= thrFrust [
-  
-    ; being at home after work or studies or at weekends
-    if (betweenHours 16 19) and (proState = []) and want2beHome [
-      set proState "StayingHome"
-    ]
-    
     
     if isEvening and proState = [] and deliberationFlag [
     ; deliberate new intention from desires if proState is idle, only deliberate once per evening!

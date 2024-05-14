@@ -59,7 +59,8 @@ end
 ;=======================================================================================================================================
 ;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS BETWEEN THE INPUTS min_hour AND max_hour. INPUT CAN ONLY BE HOURS AND NOT MINUTES!
 to-report betweenHours [min_hour max_hour]
-  ifelse (time:get "hour" current-time = min_hour and time:get "minute" current-time >= 0) or (time:get "hour" current-time = max_hour and time:get "minute" current-time = 0)
+  ;ifelse (time:get "hour" current-time = min_hour and time:get "minute" current-time >= 0) or (time:get "hour" current-time = max_hour and time:get "minute" current-time = 0)
+  ifelse (time:get "hour" current-time >= min_hour ) and (time:get "hour" current-time <= max_hour)
     [report true]
     [report false]
 end
