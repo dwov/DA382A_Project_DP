@@ -1,46 +1,31 @@
-# DA382A Projektarbete i NetLogo
- 
-Hej allihopa!
+# DA382A NetLogo Agent-Based Simulation
 
-Lite grejer för att detta ska fungera hyfsat smärtfritt.
+This repository hosts a NetLogo model that explores interactions between two breeds of agents—citizens and cops—inside a small town. The model demonstrates how Belief–Desire–Intention (BDI) reasoning, message-based communication, and time-driven routines can be combined to produce rich agent behaviour.
 
-Det viktigaste är kommunikation, förstår man inte, är man osäker på något, så säger man till. Tills dess att man får ett klart besked.
-### Viktiga tre regler
-- Vi rör inte main-branchen!
-- Vi rör absolut inte main-branchen när vi programmerar funktioner.
-- Vi rör inte main-branchen enskilt, utan tillsammans när vi fått en viss del att fungera.
+## Directory structure
 
-Min (Davids) tanke är att vi skapar egna brancher (per grupp) för att utveckla vår tilldelade funktionalitet, och endast gör en merge med main när det fungerar fläckfritt.
-När man känner att den specifika funktionen/uppgiften är klar så hämtar jämför man med senaste main versionen och bugfixar om det behövs. Man kan sedan be Gion att slå ihop brancherna.
+- `FinalTemplate/` – primary implementation of the model.
+  - `FinalTemplate.nlogo` – main NetLogo model file that ties together all supporting `.nls` files.
+  - `bdi.nls` – helpers for storing beliefs, intentions and executing actions in a BDI style.
+  - `communication.nls` – message passing system that lets agents send and receive information.
+  - `time_library.nls` – wrappers around the time extension for scheduling and querying dates.
+  - `setupenvironment.nls` – builds the map: homes, workplaces, town square, prison and other landmarks.
+  - `citizens.nls` – citizen-specific state and behaviour routines.
+  - `cops.nls` – cop-specific state and behaviour routines.
+  - `vid.nls` – utilities for recording the simulation with the `vid` extension.
+- `PT_Template1/` – an earlier template kept for reference.
 
+## Running the model
 
-Man kan också tänka sig att en fork från en grupps branch kan vara lämplig för att smidigare jobba som innan med enskilda gruppen. (Detta blir det inte, det blir troligtvis parprogrammering eller sub-branches.
+1. Open `FinalTemplate/FinalTemplate.nlogo` in NetLogo.
+2. Press **Setup** to create the town and spawn agents.
+3. Press **Go** to start the simulation.
+4. Adjust parameters in the Interface tab or extend the `.nls` files to explore new behaviours.
 
-```
-exempel-struktur
+## Development guidelines
 
-main-branch
-        |_ taskXX_branch
-        |               |_ gruppmedlem1-branch
-        |               |_ gruppmedlem2-branch
-        |_ taskXY-branch
-                        |_ gruppmedlem1-branch
-```
+Development should occur on separate branches. Avoid committing directly to `main`; merge only when features are stable and reviewed with the group.
 
+## License
 
-## En förklaring av branches på mitt förslag
-1. Main Branch: Stable, integrering hit sker endast när något fungerar fullständigt och förslagsvis i någon slags ordning där till exempel tidshantering är viktigt att få på plats innan vi går ut och äter på restaurang på kvällen.
-2. Task Branch: För varje uppgift vi får bör en branch skapas ämnad för just den funktionen.
-Example: *task-11A(-environment-setup)*, *task-XXb(-agent-communication)*
-3. Indivduella Branches: Varje gruppmedlem har sedan en egen branch för sin bekärda del av kodningen (alternativt (lättare) parprogrammering).
-Example: *john-environment-trees*, *lisa-environment-water*
-
-4. Backup Branch: DENNA RÖR VI EJ!
-
-
-Vi jobbar sedan uppåt igen. En enskild task färdig -> hämta main. När allt är fungerande i task-branch med den hämtade main -> merge till main.
-
-
-Finns för frågor och tack på förhand innan röran börjar, 
-David P.
-
+Add licensing information here if applicable.
