@@ -60,11 +60,13 @@ end
 
 ;=======================================================================================================================================
 ;RETURNS A BOOLEAN, TRUE OR FALSE, IF THE CURRENT SIMULATION TIME IS BETWEEN THE INPUTS min_hour AND max_hour. INPUT CAN ONLY BE HOURS AND NOT MINUTES!
+;Handles hour ranges that may wrap around midnight.
 to-report betweenHours [min_hour max_hour]
-
-  ifelse (time:get "hour" sim-time = min_hour and time:get "minute" sim-time >= 0) or (time:get "hour" sim-time = max_hour and time:get "minute" sim-time = 0)
-    [report true]
-    [report false]
+  let hour time:get "hour" sim-time
+  if min_hour <= max_hour [
+    report (hour >= min_hour) and (hour < max_hour)
+  ]
+  report (hour >= min_hour) or (hour < max_hour)
 end
 ;=======================================================================================================================================
 ;WRAPS THE TIME AROUND FROM 23 TO 06. DOES SO BY MANIPULATING THE TICK VALUE TO MATCH THAT OF THE SURPASSED NIGHT.
